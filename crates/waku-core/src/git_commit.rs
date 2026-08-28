@@ -237,6 +237,24 @@ fn agent_arguments(
                 push(&mut args, effort);
             }
         }
+        ProviderKind::CommandCode => {
+            push(&mut args, "--print");
+            push(&mut args, "--output-format");
+            push(&mut args, "text");
+            push(&mut args, "--plan");
+            push(&mut args, "--skip-onboarding");
+            push(&mut args, "--trust");
+            push(&mut args, "--no-session");
+            push(&mut args, "--no-auto-update");
+            if let Some(model) = model {
+                push(&mut args, "--model");
+                push(&mut args, model);
+            }
+            if let Some(effort) = reasoning_effort {
+                push(&mut args, "--effort");
+                push(&mut args, effort);
+            }
+        }
         ProviderKind::Claude => {
             push(&mut args, "--print");
             push(&mut args, "--output-format");
@@ -743,6 +761,15 @@ mod tests {
                     assert!(has(&args, "--execute"));
                     assert!(has_pair(&args, "--settings-file", "/tmp/amp.json"));
                     assert!(has_pair(&args, "--mode", "model"));
+                    assert!(has_pair(&args, "--effort", "low"));
+                }
+                ProviderKind::CommandCode => {
+                    assert!(has(&args, "--print"));
+                    assert!(has_pair(&args, "--output-format", "text"));
+                    assert!(has(&args, "--plan"));
+                    assert!(has(&args, "--no-session"));
+                    assert!(has(&args, "--skip-onboarding"));
+                    assert!(has_pair(&args, "--model", "model"));
                     assert!(has_pair(&args, "--effort", "low"));
                 }
                 ProviderKind::Codex => {

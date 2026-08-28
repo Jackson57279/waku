@@ -58,6 +58,15 @@ pub fn fallback_models(provider: ProviderKind) -> Vec<ProviderModel> {
         ProviderKind::Cursor => {
             vec![ProviderModel::new("auto", tr!("model_option.auto")).default()]
         }
+        ProviderKind::CommandCode => vec![ProviderModel::new(
+            "deepseek/deepseek-v4-flash",
+            "DeepSeek V4 Flash",
+        )
+        .default()
+        .reasoning(
+            reasoning_options(["low", "medium", "high"]),
+            "medium",
+        )],
         ProviderKind::DeepSeek
         | ProviderKind::Fx
         | ProviderKind::Grok

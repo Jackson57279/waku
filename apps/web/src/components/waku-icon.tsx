@@ -326,6 +326,7 @@ function fileTypeIconName(path: string): FileTypeIconName {
 const PROVIDER_ICONS: Record<ProviderKind, string> = {
   amp: 'i-waku-provider-amp',
   claude: 'i-waku-provider-claude',
+  commandCode: 'i-waku-provider-commandcode',
   codex: 'i-waku-provider-openai',
   cursor: 'i-waku-provider-cursor',
   deepSeek: 'i-waku-provider-deepseek',
@@ -345,6 +346,7 @@ export const PROVIDERS: Array<{
 }> = [
   { id: 'amp', name: 'Amp', shortName: 'Amp', command: 'amp' },
   { id: 'claude', name: 'Claude Code', shortName: 'Claude', command: 'claude' },
+  { id: 'commandCode', name: 'Command Code', shortName: 'Command Code', command: 'command-code' },
   { id: 'codex', name: 'Codex CLI', shortName: 'Codex', command: 'codex' },
   { id: 'cursor', name: 'Cursor CLI', shortName: 'Cursor', command: 'cursor-agent' },
   { id: 'deepSeek', name: 'DeepSeek Harness', shortName: 'DeepSeek', command: 'dsh' },

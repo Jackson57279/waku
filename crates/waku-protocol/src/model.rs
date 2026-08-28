@@ -12,6 +12,7 @@ use uuid::Uuid;
 pub enum ProviderKind {
     Amp,
     Claude,
+    CommandCode,
     #[default]
     Codex,
     Cursor,
@@ -25,9 +26,10 @@ pub enum ProviderKind {
 }
 
 impl ProviderKind {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::Amp,
         Self::Claude,
+        Self::CommandCode,
         Self::Codex,
         Self::Cursor,
         Self::DeepSeek,
@@ -43,6 +45,7 @@ impl ProviderKind {
         match self {
             Self::Amp => "amp",
             Self::Claude => "claude",
+            Self::CommandCode => "commandcode",
             Self::Codex => "codex",
             Self::Cursor => "cursor",
             Self::DeepSeek => "deepseek",
@@ -59,6 +62,7 @@ impl ProviderKind {
         match self {
             Self::Amp => "Amp",
             Self::Claude => "Claude Code",
+            Self::CommandCode => "Command Code",
             Self::Codex => "Codex CLI",
             Self::Cursor => "Cursor CLI",
             Self::DeepSeek => "DeepSeek Harness",
@@ -75,6 +79,7 @@ impl ProviderKind {
         match self {
             Self::Amp => "Amp",
             Self::Claude => "Claude",
+            Self::CommandCode => "Command Code",
             Self::Codex => "Codex",
             Self::Cursor => "Cursor",
             Self::DeepSeek => "DeepSeek",
@@ -91,6 +96,10 @@ impl ProviderKind {
         match self {
             Self::Amp => "amp",
             Self::Claude => "claude",
+            // The short alias is `cmd` on Unix and `cmdc` on Windows; both
+            // would collide with other tools. `command-code` is unambiguous
+            // and is what npm installs on every platform.
+            Self::CommandCode => "command-code",
             Self::Codex => "codex",
             // Cursor documents `agent` as its primary command, but that name is
             // shared by other CLIs. The backward-compatible alias is unambiguous.
@@ -115,6 +124,7 @@ impl ProviderKind {
             self,
             Self::Amp
                 | Self::Claude
+                | Self::CommandCode
                 | Self::Codex
                 | Self::Cursor
                 | Self::DeepSeek
@@ -130,6 +140,7 @@ impl ProviderKind {
             self,
             Self::Amp
                 | Self::Claude
+                | Self::CommandCode
                 | Self::Codex
                 | Self::Cursor
                 | Self::DeepSeek
@@ -143,7 +154,8 @@ impl ProviderKind {
     pub fn supports_model_discovery(self) -> bool {
         matches!(
             self,
-            Self::Codex
+            Self::CommandCode
+                | Self::Codex
                 | Self::Cursor
                 | Self::DeepSeek
                 | Self::Fx
@@ -172,6 +184,9 @@ pub enum ProviderResumeCursor {
         session_id: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         resume_at: Option<String>,
+    },
+    CommandCode {
+        session_id: String,
     },
     Codex {
         thread_id: String,
@@ -219,6 +234,7 @@ impl ProviderResumeCursor {
                 session_id: id,
                 resume_at: None,
             },
+            ProviderKind::CommandCode => Self::CommandCode { session_id: id },
             ProviderKind::Codex => Self::Codex { thread_id: id },
             ProviderKind::Cursor => Self::Cursor {
                 session_id: id,
@@ -244,6 +260,7 @@ impl ProviderResumeCursor {
         match self {
             Self::Amp { .. } => ProviderKind::Amp,
             Self::Claude { .. } => ProviderKind::Claude,
+            Self::CommandCode { .. } => ProviderKind::CommandCode,
             Self::Codex { .. } => ProviderKind::Codex,
             Self::Cursor { .. } => ProviderKind::Cursor,
             Self::DeepSeek { .. } => ProviderKind::DeepSeek,
@@ -260,6 +277,7 @@ impl ProviderResumeCursor {
         match self {
             Self::Amp { thread_id, .. } => thread_id,
             Self::Claude { session_id, .. }
+            | Self::CommandCode { session_id }
             | Self::Cursor { session_id, .. }
             | Self::DeepSeek { session_id }
             | Self::Fx { session_id }
@@ -840,7 +858,11 @@ pub struct ThreadGoal {
 /// come back asynchronously as [`DriverEvent::GoalUpdated`]; failures surface
 /// through [`DriverEvent::Error`].
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum GoalOperation {
     /// Re-read the provider's current goal without changing it.
     Refresh,
@@ -3939,6 +3961,8 @@ mod tests {
     fn provider_ids_are_stable() {
         assert_eq!(ProviderKind::Amp.id(), "amp");
         assert_eq!(ProviderKind::Claude.id(), "claude");
+        assert_eq!(ProviderKind::CommandCode.id(), "commandcode");
+        assert_eq!(ProviderKind::CommandCode.command(), "command-code");
         assert_eq!(ProviderKind::Codex.command(), "codex");
         assert_eq!(ProviderKind::Cursor.command(), "cursor-agent");
         assert_eq!(ProviderKind::DeepSeek.command(), "dsh");
@@ -3953,6 +3977,7 @@ mod tests {
         for provider in [
             ProviderKind::Amp,
             ProviderKind::Claude,
+            ProviderKind::CommandCode,
             ProviderKind::Codex,
             ProviderKind::Cursor,
             ProviderKind::DeepSeek,
@@ -3973,6 +3998,7 @@ mod tests {
     fn only_dynamic_provider_catalogs_are_discovered() {
         assert!(!ProviderKind::Amp.supports_model_discovery());
         assert!(!ProviderKind::Claude.supports_model_discovery());
+        assert!(ProviderKind::CommandCode.supports_model_discovery());
         assert!(ProviderKind::Codex.supports_model_discovery());
         assert!(ProviderKind::Cursor.supports_model_discovery());
         assert!(ProviderKind::DeepSeek.supports_model_discovery());

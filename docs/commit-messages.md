@@ -70,6 +70,7 @@ argument**; `NO_COLOR=1` and `CI=1` are set for all of them.
 | Provider | Command | Headless / tool-free flags | Model | Effort |
 | --- | --- | --- | --- | --- |
 | Amp | `amp` | `--execute --no-color --no-ide --no-notifications --settings-file <temp>` | `--mode` | `--effort` |
+| Command Code | `command-code` | `--print --output-format text --plan --skip-onboarding --trust --no-session --no-auto-update` | `--model` | `--effort` |
 | Claude Code | `claude` | `--print --output-format text --permission-mode plan --tools "" --disable-slash-commands --no-session-persistence --no-chrome` | pinned `claude-haiku-4-5` | pinned `low` |
 | Codex CLI | `codex exec` | `--sandbox read-only --ephemeral --color never --skip-git-repo-check` | pinned `gpt-5.6-luna` | pinned `none`, via `-c` |
 | Cursor CLI | `cursor-agent` | `--print --output-format text --mode ask --sandbox enabled --trust` | `--model` | — |

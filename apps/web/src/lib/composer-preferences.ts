@@ -31,6 +31,7 @@ const DEFAULT_PREFERENCES: ComposerPreferences = {
 const PROVIDERS = new Set<ProviderKind>([
   'amp',
   'claude',
+  'commandCode',
   'codex',
   'cursor',
   'deepSeek',

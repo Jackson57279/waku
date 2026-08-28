@@ -375,7 +375,10 @@ fn perform_message_rewind(
             && request.retained_turn_count == 0
             && matches!(
                 request.provider,
-                ProviderKind::Claude | ProviderKind::Cursor | ProviderKind::Grok
+                ProviderKind::Claude
+                    | ProviderKind::CommandCode
+                    | ProviderKind::Cursor
+                    | ProviderKind::Grok
             ),
         cleanup_error,
     })
@@ -395,7 +398,10 @@ fn perform_provider_rewind(
         && request.retained_turn_count == 0
         && matches!(
             provider,
-            ProviderKind::Claude | ProviderKind::Cursor | ProviderKind::Grok
+            ProviderKind::Claude
+                | ProviderKind::CommandCode
+                | ProviderKind::Cursor
+                | ProviderKind::Grok
         );
     if request.rollback_turns == 0 || reset_native_session {
         return Ok((None, None, None));
@@ -535,7 +541,11 @@ fn perform_provider_rewind(
                 .cursor;
             Ok((Some(cursor), None, None))
         }
-        ProviderKind::Codex | ProviderKind::DeepSeek | ProviderKind::OhMyPi | ProviderKind::Pi => {
+        ProviderKind::Codex
+        | ProviderKind::CommandCode
+        | ProviderKind::DeepSeek
+        | ProviderKind::OhMyPi
+        | ProviderKind::Pi => {
             let mut prepared_driver = None;
             let driver = if let Some(driver) = request.driver.as_ref() {
                 driver.clone()
@@ -690,6 +700,19 @@ fn perform_response_fork(mut request: ResponseForkRequest) -> Result<PreparedRes
                     anyhow::bail!(tr!(
                         "errors.provider_native_thread_unavailable",
                         provider = "Codex"
+                    ));
+                }
+                let (cursor, prepared_driver) = fork_response_with_driver(&mut request)?;
+                Ok((cursor, None, prepared_driver))
+            }
+            ProviderKind::CommandCode => {
+                if !matches!(
+                    request.source.provider_cursor.as_ref(),
+                    Some(ProviderResumeCursor::CommandCode { .. })
+                ) {
+                    anyhow::bail!(tr!(
+                        "errors.provider_native_session_unavailable",
+                        provider = "Command Code"
                     ));
                 }
                 let (cursor, prepared_driver) = fork_response_with_driver(&mut request)?;
@@ -1869,7 +1892,11 @@ impl Waku {
         }
         let driver_start = if matches!(
             provider,
-            ProviderKind::Codex | ProviderKind::DeepSeek | ProviderKind::OhMyPi | ProviderKind::Pi
+            ProviderKind::Codex
+                | ProviderKind::CommandCode
+                | ProviderKind::DeepSeek
+                | ProviderKind::OhMyPi
+                | ProviderKind::Pi
         ) && driver.is_none()
         {
             match self.driver_start_request_for_session(&source, source_workspace_path.clone()) {
@@ -2243,6 +2270,7 @@ impl Waku {
             && matches!(
                 source.provider,
                 ProviderKind::Codex
+                    | ProviderKind::CommandCode
                     | ProviderKind::DeepSeek
                     | ProviderKind::OhMyPi
                     | ProviderKind::Pi

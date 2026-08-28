@@ -9,9 +9,10 @@ polled off disk, and the one Waku generates itself — is in
 [titles.md](titles.md).
 
 Every provider is reached through the same driver abstraction in
-[driver/mod.rs](../crates/waku-core/src/driver/mod.rs). There are seven
-transport implementations behind eleven providers, and **every one of them holds a
-session that spans the whole conversation**:
+[driver/mod.rs](../crates/waku-core/src/driver/mod.rs). There are eight
+transport implementations behind twelve providers. Command Code is the one
+that still spawns a process per prompt; the conversation lives in the JSONL
+`--resume` points at, not in a long-lived child:
 
 | Transport | File | Providers |
 | --- | --- | --- |
@@ -22,6 +23,7 @@ session that spans the whole conversation**:
 | Claude streaming-input session (NDJSON over stdio) | [driver/claude.rs](../crates/waku-core/src/driver/claude.rs) | Claude Code |
 | Amp streaming-JSON session (NDJSON over stdio) | [driver/amp.rs](../crates/waku-core/src/driver/amp.rs) | Amp |
 | Harness client API (typed HTTP + downlink streams) | [driver/deepseek.rs](../crates/waku-core/src/driver/deepseek.rs) | DeepSeek Harness |
+| Command Code print mode (NDJSON over stdout) | [driver/command_code.rs](../crates/waku-core/src/driver/command_code.rs) | Command Code |
 
 DeepSeek Harness has no dedicated section below yet; its driver's module
 comment is the current reference.
@@ -91,10 +93,10 @@ interrupt and keeps its runtime (`retain_runtime_after_cancel`).
 Option changes go through `DriverControl::apply_options`, which returns whether
 the transport absorbed the change or wants to be restarted:
 
-| Change | Codex | Pi | ACP | OpenCode | Claude | Amp |
-| --- | --- | --- | --- | --- | --- | --- |
-| Model, reasoning effort, service tier | in session — they ride on every `turn/start` | in session — `set_model`, `set_thinking_level` | in session — `session/set_model`, except Fx's advertised `model` config option | in session — the model rides on each prompt | in session — a `set_model` control request | restart — all three are launch arguments |
-| Access mode, interaction mode | restart | restart | restart | restart — the agent is chosen when the session opens | restart | restart |
+| Change | Codex | Pi | ACP | OpenCode | Claude | Amp | Command Code |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Model, reasoning effort, service tier | in session — they ride on every `turn/start` | in session — `set_model`, `set_thinking_level` | in session — `session/set_model`, except Fx's advertised `model` config option | in session — the model rides on each prompt | in session — a `set_model` control request | restart — all three are launch arguments | in session — they ride on the next print spawn |
+| Access mode, interaction mode | restart | restart | restart | restart — the agent is chosen when the session opens | restart | restart | in session — they ride on the next print spawn |
 | Provider | restart | restart | restart | restart | restart | restart |
 
 The permission policy is deliberately excluded even for Codex, which does carry
@@ -149,31 +151,30 @@ OpenCode server itself, whose driver kills it explicitly on drop.
 
 ## At a glance
 
-| | Codex CLI | Pi | Oh My Pi | Claude Code | Amp | Cursor CLI | Fx | OpenCode | Grok Build | Kimi Code |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Binary | `codex` | `pi` | `omp` | `claude` | `amp` | `cursor-agent` | `fx` | `opencode` | `grok` | `kimi` |
-| Wire protocol | JSON-RPC over stdio | NDJSON RPC over stdio | NDJSON RPC over stdio | stream-json over stdio | stream-json over stdio | ACP over stdio | ACP over stdio | HTTP + SSE | ACP over stdio | ACP over stdio |
-| Process spans the whole session | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| Process spawned per turn | no | no | no | no | no | no | no | no | no | no |
-| Bidirectional | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| Reasoning stream | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
-| Interactive approvals | yes | no | no (has them; Waku runs `--yolo`) | yes | no | yes | yes | yes | yes | yes |
-| Mid-turn steering | yes | yes | yes | yes | yes | yes | **no** | yes | yes | yes (transport) |
-| Model discovery | yes | yes | yes | no (fixed) | no (modes) | yes | yes | yes | yes | yes |
-| Computer Use | yes | yes | no (ships its own) | no | no | no | no | yes | yes | no |
-| Restricted to Build + Full access | no | yes | yes | no | yes | no | no | no | no | no |
-| Rewind and branch at a turn | yes | yes | yes | yes | yes | yes | **no** | yes | yes | **no** |
+| | Codex CLI | Pi | Oh My Pi | Claude Code | Amp | Cursor CLI | Fx | OpenCode | Grok Build | Kimi Code | Command Code |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Binary | `codex` | `pi` | `omp` | `claude` | `amp` | `cursor-agent` | `fx` | `opencode` | `grok` | `kimi` | `command-code` |
+| Wire protocol | JSON-RPC over stdio | NDJSON RPC over stdio | NDJSON RPC over stdio | stream-json over stdio | stream-json over stdio | ACP over stdio | ACP over stdio | HTTP + SSE | ACP over stdio | ACP over stdio | NDJSON print events |
+| Process spans the whole session | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | no — `--resume` |
+| Process spawned per turn | no | no | no | no | no | no | no | no | no | no | yes |
+| Bidirectional | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | no |
+| Reasoning stream | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes | yes |
+| Interactive approvals | yes | no | no (has them; Waku runs `--yolo`) | yes | no | yes | yes | yes | yes | yes | no |
+| Mid-turn steering | yes | yes | yes | yes | yes | yes | **no** | yes | yes | yes (transport) | **no** |
+| Model discovery | yes | yes | yes | no (fixed) | no (modes) | yes | yes | yes | yes | yes | yes |
+| Computer Use | yes | yes | no (ships its own) | no | no | no | no | yes | yes | no | no |
+| Restricted to Build + Full access | no | yes | yes | no | yes | no | no | no | no | no | no |
+| Rewind and branch at a turn | yes | yes | yes | yes | yes | yes | **no** | yes | yes | **no** | yes (JSONL copy) |
 
 Kimi Code's steering is the transport's, not a probed policy: the ACP driver
 sends the second `session/prompt` for every agent it drives, but Kimi's
 superseded-prompt behaviour has not been observed against a live turn the way
 Cursor's and Grok's were.
 
-Every provider now holds a session across turns. That was not true when this
-document was first written: five of the seven spawned a process per prompt, and
-everything stateful — resume, rewind, branch, approvals — had to be reconstructed
-from a session id, an on-disk transcript, or a side-channel. In each case the CLI
-turned out to already serve a session protocol; nobody had looked.
+Command Code is the remaining one-shot: each prompt is a new `command-code
+--print` process. Session continuity is `--resume` against the JSONL under
+`~/.commandcode/projects`. Follow-ups stay in Waku's queue; there is nothing
+to steer into.
 
 ---
 
@@ -504,6 +505,54 @@ re-expands the nested envelope first, so branches of branches stay flat
 
 ---
 
+## Command Code
+
+**Launch** — `command-code --print --output-format json --skip-onboarding --trust
+--no-auto-update --tools-enable todo_write` plus a permission flag, optional
+`--resume <id>`, `--model`, and `--effort`
+([driver/command_code.rs](../crates/waku-core/src/driver/command_code.rs)). The prompt is
+written to stdin and the pipe is closed; it is never a CLI argument.
+
+**Protocol** — NDJSON. Each line is either `{"type":"event","event":{…}}` or a
+final `{"type":"result", subtype, sessionId, finalText, usage}`. Event types
+mapped: `run_start` → `Connected`; `text_delta` / `thinking_delta`;
+`tool_queued` / `running` / `update` / `completed` / `errored`;
+`session_titled`; `model_request_end` (usage); `interrupted` / `run_error`.
+The result line settles the turn; `finalText` fills in when no deltas arrived.
+The child's exit is **not** `ProcessExited` — that would drop the runtime and
+lose the resume id for the next prompt.
+
+**Lifetime** — one process per prompt. The conversation is the JSONL file
+under `~/.commandcode/projects/<slug>/<uuid>.jsonl`. The next prompt passes
+`--resume`. Stop sends SIGINT like Amp, but the runtime is retained so the
+following prompt can resume.
+
+**Steer** — none. Follow-ups stay in Waku's queue and start a fresh print after
+the current child exits.
+
+**Access modes** — Plan → `--plan`; Supervised → `--permission-mode standard`
+(headless blocks writes rather than asking); Auto-accept edits / Auto →
+`--auto-accept`; Full access → `--yolo`. `apply_options` stores the next
+spawn's flags and returns true.
+
+**Approvals** — none. There is no permission request on the print stream.
+
+**Branch / rewind** — Command Code's `--fork-session` copies the whole
+session and takes no turn count, so Waku copies the JSONL itself: keep the
+active `parentId` branch, drop the last N user turns, write a new uuid file
+and `.meta.json` ([command_code_session.rs](../crates/waku-core/src/command_code_session.rs)).
+Rewind to turn 0 clears the cursor, the same as Claude / Cursor / Grok.
+
+**Titles** — `session_titled` on the stream, with a `.meta.json` / `session_info`
+poll as backup.
+
+**Models** — `command-code --list-models`. Fallback `deepseek/deepseek-v4-flash`
+with low / medium / high effort.
+
+**Computer Use** — ignored.
+
+---
+
 ## OpenCode server
 
 **Launch** — `opencode serve --hostname 127.0.0.1 --port <ephemeral>`
@@ -793,15 +842,17 @@ Plan always wins over the access mode.
 | Full access | `never` / `danger-full-access` / `user` | `bypassPermissions` + `--dangerously-skip-permissions` | auto-answered | `session/set_mode` → `code` | auto-answered (`always`) | auto-answered | auto-answered |
 
 Amp, Pi, and Oh My Pi accept Build + Full access only and always run wide open
-(`--dangerously-allow-all`, `--approve`, `--yolo`).
+(`--dangerously-allow-all`, `--approve`, `--yolo`). Command Code maps every
+access mode onto a print-mode flag, but Supervised still cannot ask: headless
+`--permission-mode standard` blocks writes instead of sending a request.
 
-Every provider except those three distinguishes Supervised from the auto modes
-in a way the user can actually answer. They decide by launch flag, so
-"Supervised" degrades there to whatever the CLI does without a human at the
-terminal — for Amp because its stream carries no permission request, for Pi
-because it has no permission system to ask with, and for Oh My Pi because
-`--yolo` bypasses the one it has. Only the last of those is Waku's own
-limitation rather than the CLI's.
+Every provider except Amp, Pi, Oh My Pi, and Command Code distinguishes Supervised
+from the auto modes in a way the user can actually answer. They decide by launch
+flag, so "Supervised" degrades there to whatever the CLI does without a human at
+the terminal — for Amp because its stream carries no permission request, for Pi
+because it has no permission system to ask with, for Oh My Pi because `--yolo`
+bypasses the one it has, and for Command Code because print mode never asks.
+Only Oh My Pi's `--yolo` is Waku's own limitation rather than the CLI's.
 
 ## Resume cursors
 
@@ -820,6 +871,7 @@ persisted with the session and is what makes a Waku task outlive its process:
 | OpenCode | `session_id` | `--session` / server fork |
 | Grok | `session_id` | `--resume` / ACP fork |
 | Kimi Code | `session_id` | `session/resume`; no fork, see above |
+| Command Code | `session_id` | `--resume`; rewind/branch copy the JSONL |
 
 A cursor from the wrong provider is rejected at driver start rather than
 silently ignored.

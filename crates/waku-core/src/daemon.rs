@@ -985,6 +985,7 @@ impl WakuBackend {
                 Ok((fork.cursor, fork.message_ids))
             }
             ProviderKind::Codex
+            | ProviderKind::CommandCode
             | ProviderKind::DeepSeek
             | ProviderKind::OhMyPi
             | ProviderKind::Pi => Ok((
@@ -1108,6 +1109,14 @@ impl WakuBackend {
             {
                 bail!("Oh My Pi's native session file is unavailable");
             }
+            ProviderKind::CommandCode
+                if !matches!(
+                    source.provider_cursor.as_ref(),
+                    Some(ProviderResumeCursor::CommandCode { .. })
+                ) =>
+            {
+                bail!("Command Code's native session is unavailable");
+            }
             _ => {}
         }
 
@@ -1150,7 +1159,10 @@ impl WakuBackend {
         let reset_native_session = retained_turn_count == 0
             && matches!(
                 source.provider,
-                ProviderKind::Claude | ProviderKind::Cursor | ProviderKind::Grok
+                ProviderKind::Claude
+                    | ProviderKind::CommandCode
+                    | ProviderKind::Cursor
+                    | ProviderKind::Grok
             );
         if reset_native_session {
             return Ok((None, HashMap::new(), true));
@@ -1239,6 +1251,7 @@ impl WakuBackend {
                 Ok((Some(cursor), HashMap::new(), false))
             }
             ProviderKind::Codex
+            | ProviderKind::CommandCode
             | ProviderKind::DeepSeek
             | ProviderKind::OhMyPi
             | ProviderKind::Pi => Ok((

@@ -313,6 +313,28 @@ fn assemble_slash_commands(
                 scan_skill_files(provider, &home.join(".config/agents/skills"), &mut commands);
             }
         }
+        ProviderKind::CommandCode => {
+            scan_command_files(
+                &project_root.join(".commandcode/commands"),
+                CommandScope::Project,
+                true,
+                &mut commands,
+            );
+            scan_skill_files(
+                provider,
+                &project_root.join(".commandcode/skills"),
+                &mut commands,
+            );
+            if let Some(home) = home.as_deref() {
+                scan_command_files(
+                    &home.join(".commandcode/commands"),
+                    CommandScope::User,
+                    true,
+                    &mut commands,
+                );
+                scan_skill_files(provider, &home.join(".commandcode/skills"), &mut commands);
+            }
+        }
         // Harness commands are session-scoped and reported live by the Host,
         // and Kimi Code likewise publishes its whole command set over ACP
         // rather than from files Waku could scan.
@@ -1349,6 +1371,7 @@ mod tests {
             (ProviderKind::OpenCode, ".opencode/skills"),
             (ProviderKind::Pi, ".pi/skills"),
             (ProviderKind::OhMyPi, ".omp/skills"),
+            (ProviderKind::CommandCode, ".commandcode/skills"),
         ] {
             let skill_dir = root.join(dir).join("native-skill");
             std::fs::create_dir_all(&skill_dir).unwrap();
