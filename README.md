@@ -30,6 +30,7 @@ Waku works with:
 
 - [Amp](https://ampcode.com/)
 - Claude Code
+- [Command Code](https://commandcode.ai/)
 - Codex CLI
 - Cursor CLI
 - [Fx](https://fx.sh/)

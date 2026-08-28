@@ -5,6 +5,7 @@ mod activity;
 mod amp;
 mod claude;
 mod codex;
+mod command_code;
 mod computer_use;
 mod deepseek;
 mod opencode;
@@ -233,6 +234,12 @@ pub(crate) fn start_local(
         // Amp reads newline-delimited user messages on stdin and stays alive
         // until stdin closes, so it too serves the whole conversation.
         ProviderKind::Amp => Arc::new(amp::AmpDriver::start(options, events)?),
+        // Command Code's print mode is one-shot: each prompt is a new process
+        // that exits when the turn settles. The conversation is the JSONL
+        // file `--resume` points at, not a long-lived child.
+        ProviderKind::CommandCode => {
+            Arc::new(command_code::CommandCodeDriver::start(options, events)?)
+        }
     };
     Ok(DriverHandle { inner })
 }

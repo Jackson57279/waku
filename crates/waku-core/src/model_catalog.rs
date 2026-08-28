@@ -72,8 +72,11 @@ pub fn fallback_models(provider: ProviderKind) -> Vec<ProviderModel> {
         ProviderKind::Cursor => {
             vec![ProviderModel::new("auto", tr!("model_option.auto")).default()]
         }
-        // Harness reports its account/configuration-specific catalog from its
-        // Host. An invented fallback would make unavailable routes selectable.
+        ProviderKind::CommandCode => vec![
+            ProviderModel::new("deepseek/deepseek-v4-flash", "DeepSeek V4 Flash")
+                .default()
+                .reasoning(reasoning_options(["low", "medium", "high"]), "medium"),
+        ],
         ProviderKind::DeepSeek => Vec::new(),
         // Fx resolves its catalog through the user's active Gateway or
         // subscription login. An invented fallback could expose an unusable
@@ -125,6 +128,7 @@ pub fn discover_catalog(
         // version-gated list used by T3 Code.
         ProviderKind::Claude => (Vec::new(), None),
         ProviderKind::Cursor => (discover_cursor_models(binary), None),
+        ProviderKind::CommandCode => (discover_command_code_models(binary), None),
         ProviderKind::DeepSeek => discover_deepseek_catalog(binary),
         ProviderKind::Fx => (discover_fx_models(binary), None),
         ProviderKind::OpenCode => (discover_opencode_models(binary), None),
@@ -254,6 +258,54 @@ fn parse_cursor_models(output: &str) -> Vec<ProviderModel> {
                 label.to_owned()
             };
             let model = ProviderModel::new(id, name);
+            Some(if is_default { model.default() } else { model })
+        })
+        .collect()
+}
+
+fn discover_command_code_models(binary: &Path) -> Vec<ProviderModel> {
+    let mut command = crate::command_env::command(binary);
+    let command = command.arg("--list-models");
+    let Ok(output) = crate::command_env::output(command) else {
+        return Vec::new();
+    };
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    parse_command_code_models(&combined)
+}
+
+fn parse_command_code_models(output: &str) -> Vec<ProviderModel> {
+    strip_ansi(output)
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty()
+                || line.ends_with(':')
+                || line.contains("--model")
+                || line.starts_with("Docs:")
+                || line.starts_with("Pass the full id")
+                || line.to_ascii_lowercase().starts_with("available models")
+            {
+                return None;
+            }
+            let is_default = line.to_ascii_lowercase().contains("(default)");
+            let line = line
+                .replace("(default)", "")
+                .replace("(Default)", "")
+                .replace("FREE", "");
+            let line = line.trim();
+            let (id, description) = line.split_once("  ").or_else(|| line.split_once('\t'))?;
+            let id = id.trim();
+            let description = description.trim();
+            if id.is_empty() || id.split_whitespace().count() != 1 || description.is_empty() {
+                return None;
+            }
+            let slug = id.rsplit('/').next().unwrap_or(id);
+            let model = ProviderModel::new(id, display_name_from_slug(slug))
+                .reasoning(reasoning_options(["low", "medium", "high"]), "medium");
             Some(if is_default { model.default() } else { model })
         })
         .collect()
@@ -1236,6 +1288,38 @@ mod tests {
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].id, "auto");
         assert!(models[0].is_default);
+    }
+
+    #[test]
+    fn command_code_catalog_parses_aligned_columns_and_marks_the_default() {
+        let models = parse_command_code_models(
+            "Available models  ·  3 models\n\n\
+             Open Source\n\n\
+             deepseek/deepseek-v4-flash  Fast coding model  (default)\n\
+             moonshotai/kimi-k2.5        Kimi K2.5\n\n\
+             Pass the full id, or just the short name after the last \"/\":\n\
+             cmd --model moonshotai/kimi-k2.5\n\
+             Docs:  https://commandcode.ai/\n",
+        );
+        assert_eq!(models.len(), 2);
+        assert_eq!(models[0].id, "deepseek/deepseek-v4-flash");
+        assert_eq!(models[0].name, "Deepseek V4 Flash");
+        assert!(models[0].is_default);
+        assert_eq!(
+            models[0]
+                .reasoning_efforts
+                .iter()
+                .map(|option| option.id.as_str())
+                .collect::<Vec<_>>(),
+            ["low", "medium", "high"]
+        );
+        assert_eq!(models[1].id, "moonshotai/kimi-k2.5");
+        assert_eq!(models[1].name, "Kimi K2.5");
+        assert!(!models[1].is_default);
+
+        let fallback = fallback_models(ProviderKind::CommandCode);
+        assert_eq!(fallback[0].id, "deepseek/deepseek-v4-flash");
+        assert!(fallback[0].is_default);
     }
 
     #[test]
